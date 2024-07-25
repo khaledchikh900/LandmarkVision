@@ -16,6 +16,9 @@ pip install opencv-python mediapipe playsound
 
 Ensure all dependencies are installed using the above commands before running the application.
 
+### Jetson Devices
+For Jetson devices, ensure that MediaPipe is set up accordingly for accelerated platforms. Follow the instructions provided in the [Jetson MediaPipe setup guide](https://jetson-docs.com/libraries/mediapipe/l4t32.7.1/py3.6.9).
+
 ### Configuration
 Configure the application using `config.json`:
 - `data_path`: Path to save the collected data.

@@ -43,8 +43,8 @@ Example `config.json`:
     "camera_index": 0,
     "min_detection_confidence": 0.5,
     "min_tracking_confidence": 0.5,
-    "save_images": false,
-    "file_format": "npy"
+    "save_images": false,  
+    "file_format": "pickle"
 }
 ```
 

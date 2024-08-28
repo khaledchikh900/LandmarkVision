@@ -4,6 +4,7 @@ from PIL import Image, ImageTk  # Use PIL for image processing
 import json
 from worker import Worker
 import cv2
+import queue
 
 class FacialLandmarkCollectorUI:
     def __init__(self, root):
@@ -83,6 +84,7 @@ class FacialLandmarkCollectorUI:
 
         self.worker.start_collection(selected_action)
         self.update_ui_state(starting=True)
+        self.check_queue()
 
     def save_data(self):
         if self.worker:
@@ -108,10 +110,12 @@ class FacialLandmarkCollectorUI:
             self.worker.reset()
             self.worker = None
         self.update_ui_state(starting=False)
+        self.update_status("Idle")
 
     def exit_app(self):
         if self.worker:
             self.worker.reset()
+        self.root.quit()
         self.root.destroy()
 
     def update_ui_state(self, starting=False, pause_resume=False):
@@ -130,6 +134,19 @@ class FacialLandmarkCollectorUI:
             self.resume_button.config(state=tk.DISABLED)
             self.save_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
+    
+    def check_queue(self):
+        if self.worker and self.worker.is_alive():
+            try:
+                while True:
+                    task = self.worker.queue.get_nowait()
+                    if task[0] == 'status':
+                        self.update_status(task[1])
+                    elif task[0] == 'frame':
+                        self.update_frame(task[1])
+            except queue.Empty:
+                pass
+            self.root.after(10, self.check_queue)
 
     def update_status(self, message):
         self.status_label.config(text=f"Status: {message}")

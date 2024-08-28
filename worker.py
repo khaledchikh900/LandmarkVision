@@ -95,19 +95,24 @@ class Worker(threading.Thread):
 
     def run(self):
         while not self.stop_event.is_set():
-            if self.collecting:
-                self.collect_data()
-                self.collecting = False
+            try:
+                task = self.queue.get(timeout=0.1)
+                if task == 'collect':
+                    self.collect_data()
+                elif task == 'save':
+                    self.save_data()
+            except queue.Empty:
+                continue
 
     def collect_data(self):
         if not self.cap or not self.holistic:
-            self.update_status("Error: Collection has not started properly.")
+            self.queue.put(('status', "Error: Collection has not started properly."))
             return
 
         for i in range(3, 0, -1):
             if self.stop_event.is_set():
                 return
-            self.update_status(f"Starting in {i}...")
+            self.queue.put(('status', f"Starting in {i}..."))
             time.sleep(1)
             playsound('./note.wav')
 
@@ -116,8 +121,8 @@ class Worker(threading.Thread):
                 if self.stop_event.is_set():
                     return
 
-                while self.paused:
-                    self.pause_event.wait()
+                while self.paused and not self.stop_event.is_set():
+                    self.pause_event.wait(timeout=0.1)
 
                 ret, frame = self.cap.read()
                 if not ret:
@@ -131,24 +136,24 @@ class Worker(threading.Thread):
                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 4, cv2.LINE_AA)
                     cv2.putText(image, f'Collecting frames for {self.current_action} Video Number {sequence}', (15, 12),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
-                    self.update_frame(image)
-                    cv2.waitKey(500)
+                    self.queue.put(('frame', image))
+                    time.sleep(0.5)
                 else:
                     cv2.putText(image, f'Collecting frames for {self.current_action} Video Number {sequence}', (15, 12),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
-                    self.update_frame(image)
+                    self.queue.put(('frame', image))
 
                 keypoints = self.extract_keypoints(results)
                 self.data_buffer.append(keypoints)
                 self.images_buffer.append(frame)
 
-                if cv2.waitKey(10) & 0xFF == ord('q'):
-                    self.stop_event.set()
-                    return
+                time.sleep(0.01)  # Small delay to allow for interruption
 
-        self.cap.release()
-        self.update_frame(None)  # Clear the frame
-        self.update_status("Collection Completed")
+        if self.cap:
+            self.cap.release()
+        self.queue.put(('frame', None))
+        self.queue.put(('status', "Collection Completed"))
+
 
     def start_collection(self, action):
         self.current_action = action
@@ -164,6 +169,7 @@ class Worker(threading.Thread):
         self.images_buffer = []
         self.stop_event.clear()
         self.pause_event.clear()
+        self.queue.put('collect')
 
     def pause_collection(self):
         if self.collecting and not self.paused:
@@ -214,13 +220,13 @@ class Worker(threading.Thread):
         self.update_status("Collection Stopped")
 
     def reset(self):
-        self.stop_event.set()  # Signal the thread to stop
-        if self.is_alive():
-            self.join()  # Wait for the thread to finish
+        self.stop_event.set()
+        self.pause_event.set()
+        if self.cap:
+            self.cap.release()
         self.collecting = False
         self.paused = False
         self.data_buffer = []
         self.images_buffer = []
         self.current_action = None
-        self.cap.release()
-        self.update_status("Reset Completed")
+        self.queue.put(('status', "Reset Completed"))
